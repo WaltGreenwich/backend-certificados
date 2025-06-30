@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import prisma from "../config/prisma";
+import { generateQRImage } from "../services/qr.service";
+import path from "path";
 
 export const createStudent = async (
   req: Request,
@@ -148,5 +150,156 @@ export const assignStudentToCourse = async (
     res
       .status(500)
       .json({ message: "Error al asignar alumno a curso.", error });
+  }
+};
+
+// Generar QR para alumno asignado a curso
+export const generateQR = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { dni, code } = req.body;
+
+  if (!dni || !code) {
+    res
+      .status(400)
+      .json({ message: "DNI y código del curso son obligatorios." });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { dni } });
+    if (!user) {
+      res.status(404).json({ message: "Alumno no encontrado." });
+      return;
+    }
+
+    const course = await prisma.course.findUnique({ where: { code } });
+    if (!course) {
+      res.status(404).json({ message: "Curso no encontrado." });
+      return;
+    }
+
+    const assignment = await prisma.userCourse.findUnique({
+      where: {
+        userId_courseId: {
+          userId: user.id,
+          courseId: course.id,
+        },
+      },
+    });
+
+    if (!assignment) {
+      res
+        .status(404)
+        .json({ message: "El alumno no está asignado a este curso." });
+      return;
+    }
+
+    if (assignment.qrGenerated) {
+      res
+        .status(400)
+        .json({ message: "El QR ya fue generado para este alumno y curso." });
+      return;
+    }
+
+    const qrData = `https://midominio.com/validate?q=${code}&dni=${dni}`;
+    const qrFilename = `${dni}_${code}`;
+    const qrPath = await generateQRImage(qrData, qrFilename);
+
+    await prisma.userCourse.update({
+      where: {
+        userId_courseId: {
+          userId: user.id,
+          courseId: course.id,
+        },
+      },
+      data: {
+        qrPath,
+        qrGenerated: true,
+      },
+    });
+
+    res.status(200).json({
+      message: "QR generado correctamente.",
+      qrPath,
+      qrData,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error al generar el QR.", error });
+  }
+};
+
+// Subir certificado PDF
+export const uploadCertificate = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const { dni, code } = req.body;
+
+  if (!req.file) {
+    res.status(400).json({ message: "No se envió ningún archivo." });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { dni } });
+    const course = await prisma.course.findUnique({ where: { code } });
+
+    if (!user || !course) {
+      res.status(404).json({ message: "Alumno o curso no encontrado." });
+      return;
+    }
+
+    const assignment = await prisma.userCourse.findUnique({
+      where: {
+        userId_courseId: {
+          userId: user.id,
+          courseId: course.id,
+        },
+      },
+    });
+
+    if (!assignment) {
+      res
+        .status(404)
+        .json({ message: "El alumno no está asignado a este curso." });
+      return;
+    }
+
+    if (!assignment.qrGenerated) {
+      res
+        .status(400)
+        .json({
+          message: "Primero debes generar el QR antes de subir el certificado.",
+        });
+      return;
+    }
+
+    const certPath = path.join(
+      "src",
+      "uploads",
+      "certificates",
+      req.file.filename
+    );
+
+    await prisma.userCourse.update({
+      where: {
+        userId_courseId: {
+          userId: user.id,
+          courseId: course.id,
+        },
+      },
+      data: {
+        certificatePath: certPath,
+      },
+    });
+
+    res.status(200).json({
+      message: "Certificado subido correctamente.",
+      path: certPath,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error al subir el certificado.", error });
   }
 };
