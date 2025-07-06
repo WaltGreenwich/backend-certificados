@@ -4,7 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import adminRoutes from "./routes/admin.routes";
 import studentRoutes from "./routes/student.routes";
-import validatorRoutes from "./routes/validator.routes";
+import publicRoutes from "./routes/public.routes";
 
 dotenv.config();
 
@@ -20,7 +20,7 @@ app.use("/uploads", express.static("src/uploads"));
 // Rutas base
 app.use("/api/admin", adminRoutes);
 app.use("/api/student", studentRoutes);
-app.use("/api/validate", validatorRoutes);
+app.use("/api", publicRoutes);
 
 // Ruta por defecto
 app.get("/", (req, res) => {

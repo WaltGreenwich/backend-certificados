@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import path from "path";
 import fs from "fs";
+import { comparePassword, createToken } from "../services/auth.service";
 
 const JWT_SECRET = process.env.JWT_SECRET || "secreto";
 
@@ -13,36 +14,63 @@ export const studentLogin = async (
 ): Promise<void> => {
   const { dni, password } = req.body;
 
-  if (!dni || !password) {
-    res.status(400).json({ message: "DNI y contraseña son obligatorios." });
+  const student = await prisma.user.findUnique({ where: { dni } });
+  if (!student || student.role !== "student") {
+    res.status(401).json({ message: "Credenciales inválidas." });
     return;
   }
 
-  try {
-    const student = await prisma.user.findUnique({ where: { dni } });
-
-    if (!student || student.role !== "student") {
-      res.status(401).json({ message: "Credenciales inválidas." });
-      return;
-    }
-
-    const valid = await bcrypt.compare(password, student.password);
-    if (!valid) {
-      res.status(401).json({ message: "Credenciales inválidas." });
-      return;
-    }
-
-    const token = jwt.sign(
-      { userId: student.id, dni: student.dni, role: student.role },
-      JWT_SECRET,
-      { expiresIn: "2h" }
-    );
-
-    res.status(200).json({ token });
-  } catch (error) {
-    res.status(500).json({ message: "Error al iniciar sesión.", error });
+  const valid = await comparePassword(password, student.password);
+  if (!valid) {
+    res.status(401).json({ message: "Credenciales inválidas." });
+    return;
   }
+
+  const token = createToken({
+    userId: student.id,
+    dni: student.dni,
+    role: student.role,
+  });
+
+  res.status(200).json({ token });
 };
+
+// export const studentLogin = async (
+//   req: Request,
+//   res: Response
+// ): Promise<void> => {
+//   const { dni, password } = req.body;
+
+//   if (!dni || !password) {
+//     res.status(400).json({ message: "DNI y contraseña son obligatorios." });
+//     return;
+//   }
+
+//   try {
+//     const student = await prisma.user.findUnique({ where: { dni } });
+
+//     if (!student || student.role !== "student") {
+//       res.status(401).json({ message: "Credenciales inválidas." });
+//       return;
+//     }
+
+//     const valid = await bcrypt.compare(password, student.password);
+//     if (!valid) {
+//       res.status(401).json({ message: "Credenciales inválidas." });
+//       return;
+//     }
+
+//     const token = jwt.sign(
+//       { userId: student.id, dni: student.dni, role: student.role },
+//       JWT_SECRET,
+//       { expiresIn: "2h" }
+//     );
+
+//     res.status(200).json({ token });
+//   } catch (error) {
+//     res.status(500).json({ message: "Error al iniciar sesión.", error });
+//   }
+// };
 
 export const getMyCourses = async (
   req: Request,

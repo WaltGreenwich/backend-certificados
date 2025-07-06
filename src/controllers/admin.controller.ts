@@ -1,49 +1,37 @@
-import { Request, Response } from "express";
+import { Request, RequestHandler, Response } from "express";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
-import prisma from "../config/prisma";
+
 import { generateQRImage } from "../services/qr.service";
 import path from "path";
+import { hashPassword } from "../services/auth.service";
 
-export const createStudent = async (
+const prisma = new PrismaClient();
+
+export const createStudent: RequestHandler = async (
   req: Request,
   res: Response
 ): Promise<void> => {
-  const { fullName, dni, password } = req.body;
+  const { fullName, dni } = req.body;
 
-  if (!fullName || !dni || !password) {
-    res.status(400).json({ message: "Todos los campos son obligatorios." });
+  const existingUser = await prisma.user.findUnique({ where: { dni } });
+  if (existingUser) {
+    res.status(400).json({ message: "DNI ya registrado." });
     return;
   }
 
-  try {
-    const existing = await prisma.user.findUnique({ where: { dni } });
-    if (existing) {
-      res.status(409).json({ message: "El DNI ya está registrado." });
-      return;
-    }
+  const passwordHash = await hashPassword(dni); // DNI como contraseña inicial
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({
+    data: {
+      fullName,
+      dni,
+      password: passwordHash,
+      role: "student",
+    },
+  });
 
-    const newStudent = await prisma.user.create({
-      data: {
-        fullName,
-        dni,
-        password: hashedPassword,
-        role: "student",
-      },
-    });
-
-    res.status(201).json({
-      message: "Alumno creado correctamente.",
-      student: {
-        id: newStudent.id,
-        fullName: newStudent.fullName,
-        dni: newStudent.dni,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Error al crear el alumno.", error });
-  }
+  res.status(201).json({ message: "Alumno creado", user });
 };
 
 // Crear curso
@@ -268,11 +256,9 @@ export const uploadCertificate = async (
     }
 
     if (!assignment.qrGenerated) {
-      res
-        .status(400)
-        .json({
-          message: "Primero debes generar el QR antes de subir el certificado.",
-        });
+      res.status(400).json({
+        message: "Primero debes generar el QR antes de subir el certificado.",
+      });
       return;
     }
 
