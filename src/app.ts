@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import adminRoutes from "./routes/admin.routes";
 import studentRoutes from "./routes/student.routes";
 import publicRoutes from "./routes/public.routes";
+import authRoutes from "./routes/auth.routes";
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use("/uploads", express.static("src/uploads"));
 app.use("/api/admin", adminRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api", publicRoutes);
+app.use("/api/auth", authRoutes);
 
 // Ruta por defecto
 app.get("/", (req, res) => {
